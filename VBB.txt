@@ -1,0 +1,273 @@
+#MOHON DIGUNAKAN DENGAN BIJAK SEBAGAI PANDUAN PEMBELAJARAN
+#PLEASE USE WISE AS A LEARNING GUIDE
+
+UNTUK MEMPERMUDAH DALAM PEMBUATAN APLIKASI DI Visual Studio 2013
+Mohon untuk mengikuti step by step dalam video tutorial saya.
+
+Jangan lupa LIKE,SHARE, COMMENTS, and SUBSCRIBE MY CHANNEL YOUTUBE "DUINO ELEKTRONIK"
+Social Media Instagram @duinogram
+
+Module
+
+Imports System.Data.OleDb
+Module DBconfig
+    Public CONN As OleDbConnection
+    Public DA As OleDbDataAdapter
+    Public DS As DataSet
+    Public CMD As OleDbCommand
+    Public DR As OleDbDataReader
+
+    Sub koneksiDB()
+        Try
+            CONN = New OleDbConnection("provider=microsoft.ace.Oledb.12.0; data source=Larutan.accdb")
+            CONN.Open()
+            'MsgBox("Connection database SUCCES")
+        Catch ex As Exception
+            MsgBox(ex.Message)
+        End Try
+    End Sub
+End Module
+
+Form1
+Public Class Form1
+    Private readBuffer As String = String.Empty
+    Private Bytenumber As Integer
+    Private BytetoRead As Integer
+    Private byteEnd(2) As Char
+    Dim strinput As String
+    Dim prosesoff As Boolean = False
+    Dim disconnect As Boolean = False
+    Dim data(2) As String //ganti angka 2 dengan inputan arduino yang akan digunakan
+
+    Sub Tampilan()
+        Call KoneksiDB()
+        DA = New OleDb.OleDbDataAdapter("select * from data", CONN)
+        DS = New DataSet
+        DS.Clear()
+        DA.Fill(DS, "data")
+        DGV.DataSource = DS.Tables("data")
+        DGV.ReadOnly = True
+    End Sub
+
+    Private Sub Form1_Load(sender As Object, e As EventArgs) Handles MyBase.Load
+        Me.CenterToParent()
+        Bt_Connect.Enabled = False
+        Bt_Connect.BringToFront()
+
+        Bt_Disconnect.Enabled = False
+        Bt_Disconnect.SendToBack()
+
+        Cb_Baud.SelectedItem = "115200"
+        Call Tampilan()
+    End Sub
+
+    Private Sub Bt_Com_Click(sender As Object, e As EventArgs) Handles Bt_Com.Click
+        Cb_Com.Items.Clear()
+        Dim myPort As Array
+        Dim i As Integer
+        myPort = IO.Ports.SerialPort.GetPortNames()
+        Cb_Com.Items.AddRange(myPort)
+        i = Cb_Com.Items.Count
+        i = i - i
+        Try
+            Cb_Com.SelectedIndex = i
+        Catch ex As Exception
+            Dim result As DialogResult
+            result = MessageBox.Show("Com Port is not detected", "WARNING !!!", MessageBoxButtons.OK)
+            Cb_Com.Text = ""
+            Cb_Com.Items.Clear()
+            Call Form1_Load(Me, e)
+        End Try
+        Bt_Connect.Enabled = True
+        Bt_Connect.BringToFront()
+        Cb_Com.DroppedDown = True
+    End Sub
+
+    Private Sub Bt_Connect_Click(sender As Object, e As EventArgs) Handles Bt_Connect.Click
+        Bt_Connect.Enabled = False
+        Bt_Connect.SendToBack()
+
+        SerialPort1.BaudRate = Cb_Baud.SelectedItem
+        SerialPort1.PortName = Cb_Com.SelectedItem
+        SerialPort1.Open()
+        Timer1.Start()
+        Timer2.Stop()
+
+        PictureBox2.BackColor = Color.Yellow
+        Bt_Disconnect.Enabled = True
+        Bt_Disconnect.BringToFront()
+    End Sub
+
+    Private Sub Bt_Disconnect_Click(sender As Object, e As EventArgs) Handles Bt_Disconnect.Click
+        Bt_Disconnect.Enabled = False
+        Bt_Disconnect.SendToBack()
+
+        Timer1.Stop()
+        Timer2.Start()
+        SerialPort1.Close()
+
+        Tx_pH.Text = "00.00"
+        Tx_Suhu.Text = "00.00"
+
+        PictureBox2.BackColor = Color.Red
+        Bt_Connect.Enabled = True
+        Bt_Connect.BringToFront()
+        Tx_Data.Text = ""
+        Tx_Date.Text = ""
+        Tx_Time.Text = ""
+    End Sub
+
+    Private Sub SerialPort1_DataReceived(sender As Object, e As IO.Ports.SerialDataReceivedEventArgs) Handles SerialPort1.DataReceived
+        If SerialPort1.IsOpen Then
+            Try
+                byteEnd = SerialPort1.NewLine.ToCharArray
+                Bytenumber = SerialPort1.BytesToRead
+                readBuffer = SerialPort1.ReadLine()
+
+                Me.Invoke(New EventHandler(AddressOf DoUpdate))
+            Catch ex As Exception
+                'MsgBox ("READ" & ex.Message)
+            End Try
+        End If
+    End Sub
+
+    Private Sub DoUpdate(ByVal sender As Object, ByVal e As System.EventArgs)
+        Timer1.Enabled = True
+        Call proses_fix()
+
+        If disconnect Then
+            prosesoff = True
+        End If
+    End Sub
+
+    Private Sub proses_fix()
+        strinput = Tx_Data.Text
+        Dim panjang_data As Integer
+        Dim x As Integer
+        Dim z As Integer
+        strinput = Tx_pH.Text
+        panjang_data = Len(Tx_pH.Text)
+
+        Dim i As Integer
+        i = 0
+        z = 0
+
+        For x = 1 To Len(readBuffer$)
+            If Mid(readBuffer$, x, 1) = "," Then
+                z = z + 1
+                data(i) = Mid(readBuffer$, z, x - z)
+                i = i + 1
+                z = x
+            End If
+        Next x
+    End Sub
+
+    Private Sub Bt_Help_Click(sender As Object, e As EventArgs) Handles Bt_Help.Click
+        MessageBox.Show("1. Click the PORT button" + Environment.NewLine +
+                        "2. Select the read COMxx" + Environment.NewLine +
+                        "3. Set Baudrate to 9600" + Environment.NewLine +
+                        "4. Click the CONNECT button to start the measurement" + Environment.NewLine +
+                        "5. Click the DISCONNECT button to end the measurement" + Environment.NewLine +
+                        "6. Click the SAVE button to save the data" + Environment.NewLine +
+                        "7. Click the DELETE button to delete data" + Environment.NewLine +
+                        "8. Click the CLEAR ALL button to delete all data" + Environment.NewLine +
+                        "9. Click the CLOSE button to close the application", "INFORMATION !!!", MessageBoxButtons.OK)
+    End Sub
+
+    Private Sub Timer1_Tick(sender As Object, e As EventArgs) Handles Timer1.Tick
+        Tx_Date.Text = Format(Now, "dd/MM/yyyy")
+        Tx_Time.Text = Format(Now, "HH:mm:ss")
+
+        If SerialPort1.IsOpen Then
+            Tx_Data.Text = readBuffer
+            Tx_pH.Text = data(0)
+            Tx_Suhu.Text = data(1)
+        End If
+    End Sub
+
+    Private Sub Timer2_Tick(sender As Object, e As EventArgs) Handles Timer2.Tick
+        If prosesoff Then
+            SerialPort1.Close()
+            Timer2.Enabled = False
+            Tx_Data.Text = " "
+        End If
+    End Sub
+
+    Private Sub Bt_Close_Click(sender As Object, e As EventArgs) Handles Bt_Close.Click
+        Me.Close()
+    End Sub
+
+    Private Sub Bt_Save_Click(sender As Object, e As EventArgs) Handles Bt_Save.Click
+        If Tx_Date.Text = "" Or Tx_Time.Text = "" Or Tx_pH.Text = "" Or Tx_Suhu.Text = "" Then
+            MsgBox("Data incomplete!")
+        Else
+            Call koneksiDB()
+            Dim simpan As String = "insert into data values ('" & Tx_Time.Text & "','" & Tx_Date.Text & "','" & Tx_pH.Text & "','" & Tx_Suhu.Text & "')"
+            CMD = New OleDb.OleDbCommand(simpan, CONN)
+            CMD.ExecuteNonQuery()
+            MsgBox("Data saved", MsgBoxStyle.Information, "INFORMATION")
+            Call Tampilan()
+        End If
+    End Sub
+
+    Private Sub Bt_Delete_Click(sender As Object, e As EventArgs) Handles Bt_Delete.Click
+        If Tx_Time.Text = "" Or Tx_Date.Text = "" Or Tx_pH.Text = "" Or Tx_Suhu.Text = "" Then
+            MsgBox("Data incomplete!")
+            Exit Sub
+
+        Else
+            Call koneksiDB()
+            Dim hapus As String = "delete from data where TIME= '" & Tx_Time.Text & "'"
+            CMD = New OleDb.OleDbCommand(hapus, CONN)
+            CMD.ExecuteNonQuery()
+            MsgBox("Are you sure you want to delete data?", MsgBoxStyle.YesNo, "INFPRMATION")
+            Call Tampilan()
+        End If
+    End Sub
+
+    Private Sub Bt_Clear_Click(sender As Object, e As EventArgs) Handles Bt_Clear.Click
+        Call koneksiDB()
+        Dim semua As String = "delete from data"
+        CMD = New OleDb.OleDbCommand(semua, CONN)
+        CMD.ExecuteNonQuery()
+        MsgBox("SUCCES delete all data", MsgBoxStyle.YesNo, "INFPRMATION")
+        Call Tampilan()
+    End Sub
+
+    Private Sub DGV_CellContentClick(sender As Object, e As DataGridViewCellEventArgs) Handles DGV.CellContentClick
+        Call koneksiDB()
+        Dim i As Integer
+        i = DGV.CurrentRow.Index
+        CMD = New OleDb.OleDbCommand("Select * from data where TIME='" & DGV.Item(0, i).Value & "'", CONN)
+        DR = CMD.ExecuteReader
+        DR.Read()
+        If Not DR.HasRows Then
+            Tx_Time.Focus()
+        Else
+            Tx_Time.Text = DR.Item("TIME")
+            Tx_Date.Text = DR.Item("DATE")
+            Tx_pH.Text = DR.Item("PH")
+            Tx_Suhu.Text = DR.Item("TEMP")
+            Tx_Time.Focus()
+        End If
+    End Sub
+End Class
+
+Baud rate
+1200
+2400
+4800
+9600
+19200
+38400
+57600
+74880
+115200
+
+Try 
+	Dim i As Single = SerialPort1.ReadExiting
+	Lb.Data.Text = i.ToSting
+
+Catch ex As Exception
+
+End Try
